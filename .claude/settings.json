@@ -13,18 +13,5 @@
       "Bash(rm -rf:*)",
       "Bash(git push --force:*)"
     ]
-  },
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash -c 'mkdir -p docs/logs && LOGFILE=\"docs/logs/$(date +%Y%m%d_%H%M)_session.md\" && [ ! -f \"$LOGFILE\" ] && printf \"# セッションログ\\n\\n**日時**: $(date \"+%Y-%m-%d %H:%M\")\\n**ステータス**: 未記入\\n\\n---\\n\\n## 受けた指示\\n\\n（未記入）\\n\\n## 実施した内容\\n\\n（未記入）\\n\\n## 成果物\\n\\n（未記入）\\n\\n## 次のステップ\\n\\n（未記入）\\n\" > \"$LOGFILE\" && echo \"[ログ生成] $LOGFILE\" || echo \"[ログ確認] 既存ログあり\"'"
-          }
-        ]
-      }
-    ]
   }
 }
