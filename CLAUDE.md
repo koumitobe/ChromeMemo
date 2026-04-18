@@ -53,6 +53,7 @@ project-root/
 │   └── changelog/         # 仕様変更履歴
 ├── docs/                  # 技術ドキュメント
 │   ├── adr/               # Architecture Decision Records
+│   ├── logs/              # セッションログ（自動生成）
 │   ├── runbooks/          # 運用手順書
 │   └── architecture.md    # システム構成図・説明
 ├── src/                   # 実装コード
@@ -60,6 +61,16 @@ project-root/
 ├── tasks/                 # タスク・進捗管理
 └── .env.example           # 環境変数テンプレート
 ```
+
+---
+
+## セッションログルール
+
+- **セッション終了前に必ず** `docs/logs/YYYYMMDD_HHMM_タイトル.md` にログを作成する
+- Stopフックがスタブファイルを自動生成するが、**内容はClaudeが必ず埋める**
+- ログ内容：受けた指示の要約・実施内容・成果物（ファイル名など）・次のステップ
+- 非エンジニアが読める平易な日本語で記述する
+- テンプレートは `docs/logs/_template.md` を参照
 
 ---
 
