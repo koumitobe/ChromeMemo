@@ -21,7 +21,7 @@
   let shadow, isDark = false, customTemplates = [], editingTemplateId = null;
   let autoSaveTimer = null;
   let undoStack = [], redoStack = [];
-  let isSaving = false; // 自タブ保存中フラグ（他タブからの onChanged と区別する）
+  let lastSavedJSON = ''; // 自タブの直近保存データ（onChanged で自タブ判別に使用）
   let isDirty = false;  // 編集中フラグ（未保存の変更があるか）
 
   // ========== Shadow DOM セットアップ ==========
@@ -173,10 +173,8 @@
   // ========== ストレージ保存ラッパー ==========
   async function saveMemosLocal(data) {
     if (!chrome.runtime?.id) return; // コンテキスト無効時はスキップ
-    isSaving = true;
+    lastSavedJSON = JSON.stringify(data);
     await saveMemos(data);
-    // onChanged は非同期で発火するため、次のイベントループで解除
-    setTimeout(() => { isSaving = false; }, 0);
   }
 
   // ========== メモ操作 ==========
@@ -1100,8 +1098,10 @@
     chrome.storage.onChanged.addListener((changes, area) => {
       if (!chrome.runtime?.id) return; // コンテキスト無効時はスキップ
       if (area !== 'local' || !changes.chromememo_memos) return;
-      if (isSaving) return; // 自タブの保存による発火はスキップ
-      memos = changes.chromememo_memos.newValue || [];
+      const newMemos = changes.chromememo_memos.newValue || [];
+      // 自タブの保存データと一致する場合はスキップ
+      if (JSON.stringify(newMemos) === lastSavedJSON) return;
+      memos = newMemos;
       if (!isOpen) return;
 
       // 編集画面が開いている場合は同期処理
