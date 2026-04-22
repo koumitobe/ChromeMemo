@@ -24,6 +24,18 @@
   let lastSavedJSON = ''; // 自タブの直近保存データ（onChanged で自タブ判別に使用）
   let isDirty = false;  // 編集中フラグ（未保存の変更があるか）
 
+  // ========== エラーログ ==========
+  function cmLog(context, err) {
+    console.error(`[ChromeMemo] ${context}:`, err);
+  }
+
+  // shadow DOM内から発生したイベントか判定する
+  function isInOurShadow(e) {
+    try {
+      return !!shadow && e.composedPath().includes(shadow.host);
+    } catch (err) { cmLog('isInOurShadow', err); return false; }
+  }
+
   // ========== Shadow DOM セットアップ ==========
   function buildHost() {
     const host = document.createElement('div');
@@ -179,53 +191,63 @@
 
   // ========== メモ操作 ==========
   async function createMemo() {
-    const memo = {
-      id: crypto.randomUUID(), title: '', body: '', tags: [], pinned: false,
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-    };
-    memos.unshift(memo);
-    await saveMemosLocal(memos);
-    openDetail(memo.id);
+    try {
+      const memo = {
+        id: crypto.randomUUID(), title: '', body: '', tags: [], pinned: false,
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      };
+      memos.unshift(memo);
+      await saveMemosLocal(memos);
+      openDetail(memo.id);
+    } catch (err) { cmLog('createMemo', err); }
   }
 
   async function saveMemo() {
-    const memo = memos.find(m => m.id === currentId);
-    if (!memo) return;
-    memo.title = $('memo-title-input').value;
-    memo.body = $('memo-body-input').value;
-    memo.updatedAt = new Date().toISOString();
-    await saveMemosLocal(memos);
-    isDirty = false;
-    $('sync-banner').classList.add('hidden');
-    $('memo-meta-info').textContent = `作成: ${formatDate(memo.createdAt)}　更新: ${formatDate(memo.updatedAt)}`;
-    $('last-saved-time').textContent = `保存 ${formatTime(memo.updatedAt)}`;
-    renderList();
+    try {
+      const memo = memos.find(m => m.id === currentId);
+      if (!memo) return;
+      memo.title = $('memo-title-input').value;
+      memo.body = $('memo-body-input').value;
+      memo.updatedAt = new Date().toISOString();
+      await saveMemosLocal(memos);
+      isDirty = false;
+      $('sync-banner').classList.add('hidden');
+      $('memo-meta-info').textContent = `作成: ${formatDate(memo.createdAt)}　更新: ${formatDate(memo.updatedAt)}`;
+      $('last-saved-time').textContent = `保存 ${formatTime(memo.updatedAt)}`;
+      renderList();
+    } catch (err) { cmLog('saveMemo', err); }
   }
 
   async function deleteMemo() {
-    if (!confirm('このメモを削除しますか？')) return;
-    memos = memos.filter(m => m.id !== currentId);
-    await saveMemosLocal(memos);
-    currentId = null;
-    showDetail(false);
-    renderList();
+    try {
+      if (!confirm('このメモを削除しますか？')) return;
+      memos = memos.filter(m => m.id !== currentId);
+      await saveMemosLocal(memos);
+      currentId = null;
+      showDetail(false);
+      renderList();
+    } catch (err) { cmLog('deleteMemo', err); }
   }
 
   async function deleteFromList(id) {
-    const title = memos.find(m => m.id === id)?.title || 'タイトルなし';
-    if (!confirm(`「${title}」を削除しますか？`)) return;
-    memos = memos.filter(m => m.id !== id);
-    if (currentId === id) currentId = null;
-    await saveMemosLocal(memos);
-    renderList();
+    try {
+      const title = memos.find(m => m.id === id)?.title || 'タイトルなし';
+      if (!confirm(`「${title}」を削除しますか？`)) return;
+      memos = memos.filter(m => m.id !== id);
+      if (currentId === id) currentId = null;
+      await saveMemosLocal(memos);
+      renderList();
+    } catch (err) { cmLog('deleteFromList', err); }
   }
 
   async function togglePin(id) {
-    const memo = memos.find(m => m.id === id);
-    if (!memo) return;
-    memo.pinned = !memo.pinned;
-    await saveMemosLocal(memos);
-    renderList();
+    try {
+      const memo = memos.find(m => m.id === id);
+      if (!memo) return;
+      memo.pinned = !memo.pinned;
+      await saveMemosLocal(memos);
+      renderList();
+    } catch (err) { cmLog('togglePin', err); }
   }
 
   // ========== タグ操作 ==========
@@ -1063,51 +1085,50 @@
 
   // ========== 初期化 ==========
   async function init() {
-    buildHost();
-    [memos] = await Promise.all([getMemos()]);
-    await Promise.all([loadTemplates(), loadDarkMode()]);
+    try {
+      buildHost();
+      [memos] = await Promise.all([getMemos()]);
+      await Promise.all([loadTemplates(), loadDarkMode()]);
 
-    if (memos.length === 0) await createWelcomeMemo();
+      if (memos.length === 0) await createWelcomeMemo();
 
-    isOpen = await getSidebarOpen();
-    if (isOpen) { $('sidebar').classList.add('open'); renderList(); }
-    setupEvents();
+      isOpen = await getSidebarOpen();
+      if (isOpen) { $('sidebar').classList.add('open'); renderList(); }
+      setupEvents();
 
-    // 他タブで保存が発生した際にメモ一覧・編集画面をリアルタイム更新
-    chrome.storage.onChanged.addListener((changes, area) => {
-      if (!chrome.runtime?.id) return; // コンテキスト無効時はスキップ
-      if (area !== 'local' || !changes.chromememo_memos) return;
-      const newMemos = changes.chromememo_memos.newValue || [];
-      // 自タブの保存データと一致する場合はスキップ
-      if (JSON.stringify(newMemos) === lastSavedJSON) return;
-      memos = newMemos;
-      if (!isOpen) return;
+      // 他タブで保存が発生した際にメモ一覧・編集画面をリアルタイム更新
+      chrome.storage.onChanged.addListener((changes, area) => {
+        try {
+          if (!chrome.runtime?.id) return;
+          if (area !== 'local' || !changes.chromememo_memos) return;
+          const newMemos = changes.chromememo_memos.newValue || [];
+          if (JSON.stringify(newMemos) === lastSavedJSON) return;
+          memos = newMemos;
+          if (!isOpen) return;
 
-      // 編集画面が開いている場合は同期処理
-      if (currentId) {
-        const updated = memos.find(m => m.id === currentId);
-        if (updated) {
-          if (!isDirty) {
-            // 未編集ならそのまま反映
-            $('memo-title-input').value = updated.title;
-            $('memo-body-input').value = updated.body;
-            undoStack = [{ v: updated.body, s: 0, e: 0 }]; redoStack = [];
-            $('memo-meta-info').textContent = `作成: ${formatDate(updated.createdAt)}　更新: ${formatDate(updated.updatedAt)}`;
-            $('last-saved-time').textContent = `保存 ${formatTime(updated.updatedAt)}`;
-            renderTagEditor(updated.tags);
-          } else {
-            // 編集中はバナーで通知し、ユーザーの判断に委ねる
-            $('sync-banner').classList.remove('hidden');
+          if (currentId) {
+            const updated = memos.find(m => m.id === currentId);
+            if (updated) {
+              if (!isDirty) {
+                $('memo-title-input').value = updated.title;
+                $('memo-body-input').value = updated.body;
+                undoStack = [{ v: updated.body, s: 0, e: 0 }]; redoStack = [];
+                $('memo-meta-info').textContent = `作成: ${formatDate(updated.createdAt)}　更新: ${formatDate(updated.updatedAt)}`;
+                $('last-saved-time').textContent = `保存 ${formatTime(updated.updatedAt)}`;
+                renderTagEditor(updated.tags);
+              } else {
+                $('sync-banner').classList.remove('hidden');
+              }
+            } else {
+              currentId = null; isDirty = false;
+              $('sync-banner').classList.add('hidden');
+              showDetail(false);
+            }
           }
-        } else {
-          // 他タブで削除された場合は一覧に戻る
-          currentId = null; isDirty = false;
-          $('sync-banner').classList.add('hidden');
-          showDetail(false);
-        }
-      }
-      renderList();
-    });
+          renderList();
+        } catch (err) { cmLog('onChanged', err); }
+      });
+    } catch (err) { cmLog('init', err); }
   }
 
   chrome.runtime.onMessage.addListener(({ type }) => {
@@ -1115,43 +1136,75 @@
   });
 
   // ========== windowレベルキャプチャ ==========
-  // SPAが動的に追加するdocumentキャプチャハンドラより先に登録し、
-  // shadow DOM内テキストエリアへのキーボード干渉をブロックする
-  window.addEventListener('keydown', e => {
-    const ta = shadow?.getElementById('memo-body-input');
-    if (!ta) return;
-    if (!e.composedPath().includes(ta)) return;
+  // コンテンツスクリプト読み込み時点で登録することで、
+  // SPAが動的に追加するキャプチャハンドラより先に実行される
 
-    // Cmd+Z / Cmd+Shift+Z : カスタムアンドゥ/リドゥ
-    if ((e.metaKey || e.ctrlKey) && !e.altKey) {
-      if (e.key === 'z' && !e.shiftKey) {
-        e.preventDefault(); e.stopPropagation();
-        if (undoStack.length > 1) {
-          redoStack.push(undoStack.pop());
-          const st = undoStack[undoStack.length - 1];
-          ta.value = st.v; ta.setSelectionRange(st.s, st.e);
-          scheduleAutoSave();
-        }
-        return;
+  // マウスダウン: SPAのpreventDefaultによるフォーカス阻害をブロック
+  window.addEventListener('mousedown', e => {
+    try {
+      if (!isInOurShadow(e)) return;
+      const target = e.composedPath()[0];
+      if (target?.tagName === 'TEXTAREA' || target?.tagName === 'INPUT') {
+        e.preventDefault = () => {};
       }
-      if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
-        e.preventDefault(); e.stopPropagation();
-        if (redoStack.length > 0) {
-          const st = redoStack.pop();
-          undoStack.push(st);
-          ta.value = st.v; ta.setSelectionRange(st.s, st.e);
-          scheduleAutoSave();
-        }
-        return;
-      }
-      return; // その他のCmd+キーはそのまま通過
-    }
-
-    // 通常の文字入力キー: SPAのpreventDefaultをブロックして入力を保証する
-    if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete' || e.key === 'Enter') {
-      e.preventDefault = () => {};
-    }
+    } catch (err) { cmLog('mousedown capture', err); }
   }, true);
+
+  // keydown: Undo/Redo処理 + 文字入力キーのpreventDefaultをブロック
+  window.addEventListener('keydown', e => {
+    try {
+      if (!isInOurShadow(e)) return;
+      const path = e.composedPath();
+      const target = path[0];
+      const ta = shadow?.getElementById('memo-body-input');
+
+      // Undo/Redo: memo-body-inputが対象の場合のみ処理
+      if (ta && path.includes(ta) && (e.metaKey || e.ctrlKey) && !e.altKey) {
+        if (e.key === 'z' && !e.shiftKey) {
+          e.preventDefault(); e.stopPropagation();
+          if (undoStack.length > 1) {
+            redoStack.push(undoStack.pop());
+            const st = undoStack[undoStack.length - 1];
+            ta.value = st.v; ta.setSelectionRange(st.s, st.e);
+            scheduleAutoSave();
+          }
+          return;
+        }
+        if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
+          e.preventDefault(); e.stopPropagation();
+          if (redoStack.length > 0) {
+            const st = redoStack.pop();
+            undoStack.push(st);
+            ta.value = st.v; ta.setSelectionRange(st.s, st.e);
+            scheduleAutoSave();
+          }
+          return;
+        }
+        return; // その他のCmd+キーは通過
+      }
+
+      // 文字入力キー: shadow DOM内の入力要素をSPAの干渉から保護
+      if (target?.tagName === 'TEXTAREA' || target?.tagName === 'INPUT') {
+        if (!e.metaKey && !e.ctrlKey &&
+            (e.key.length === 1 || ['Backspace', 'Delete', 'Enter'].includes(e.key))) {
+          e.preventDefault = () => {};
+        }
+      }
+    } catch (err) { cmLog('keydown capture', err); }
+  }, true);
+
+  // keypress / beforeinput: 文字挿入レイヤーも保護
+  ['keypress', 'beforeinput'].forEach(type => {
+    window.addEventListener(type, e => {
+      try {
+        if (!isInOurShadow(e)) return;
+        const target = e.composedPath()[0];
+        if (target?.tagName === 'TEXTAREA' || target?.tagName === 'INPUT') {
+          e.preventDefault = () => {};
+        }
+      } catch (err) { cmLog(`${type} capture`, err); }
+    }, true);
+  });
 
   init();
 })();
