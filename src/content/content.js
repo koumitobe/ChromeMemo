@@ -548,28 +548,7 @@
       isDirty = true;
       scheduleAutoSave();
     });
-    // Cmd+Z / Cmd+Shift+Z をカスタムスタックで処理（SPAのkeydownより先にキャプチャ）
-    $('memo-body-input').addEventListener('keydown', e => {
-      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
-      const ta = $('memo-body-input');
-      if (e.key === 'z' && !e.shiftKey) {
-        e.preventDefault(); e.stopPropagation();
-        if (undoStack.length > 1) {
-          redoStack.push(undoStack.pop());
-          const st = undoStack[undoStack.length - 1];
-          ta.value = st.v; ta.setSelectionRange(st.s, st.e);
-          scheduleAutoSave();
-        }
-      } else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
-        e.preventDefault(); e.stopPropagation();
-        if (redoStack.length > 0) {
-          const st = redoStack.pop();
-          undoStack.push(st);
-          ta.value = st.v; ta.setSelectionRange(st.s, st.e);
-          scheduleAutoSave();
-        }
-      }
-    }, true); // キャプチャフェーズでSPAのハンドラより先に処理
+    // ※ Cmd+Z / Cmd+Shift+Z はwindowレベルのキャプチャで処理（setupEventsより前に登録済み）
     $('insert-url-btn').addEventListener('click', insertCurrentUrl);
     $('template-btn').addEventListener('click', () => {
       updateTemplateMenu();
@@ -1134,6 +1113,45 @@
   chrome.runtime.onMessage.addListener(({ type }) => {
     if (type === 'TOGGLE_SIDEBAR') toggleSidebar();
   });
+
+  // ========== windowレベルキャプチャ ==========
+  // SPAが動的に追加するdocumentキャプチャハンドラより先に登録し、
+  // shadow DOM内テキストエリアへのキーボード干渉をブロックする
+  window.addEventListener('keydown', e => {
+    const ta = shadow?.getElementById('memo-body-input');
+    if (!ta) return;
+    if (!e.composedPath().includes(ta)) return;
+
+    // Cmd+Z / Cmd+Shift+Z : カスタムアンドゥ/リドゥ
+    if ((e.metaKey || e.ctrlKey) && !e.altKey) {
+      if (e.key === 'z' && !e.shiftKey) {
+        e.preventDefault(); e.stopPropagation();
+        if (undoStack.length > 1) {
+          redoStack.push(undoStack.pop());
+          const st = undoStack[undoStack.length - 1];
+          ta.value = st.v; ta.setSelectionRange(st.s, st.e);
+          scheduleAutoSave();
+        }
+        return;
+      }
+      if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
+        e.preventDefault(); e.stopPropagation();
+        if (redoStack.length > 0) {
+          const st = redoStack.pop();
+          undoStack.push(st);
+          ta.value = st.v; ta.setSelectionRange(st.s, st.e);
+          scheduleAutoSave();
+        }
+        return;
+      }
+      return; // その他のCmd+キーはそのまま通過
+    }
+
+    // 通常の文字入力キー: SPAのpreventDefaultをブロックして入力を保証する
+    if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete' || e.key === 'Enter') {
+      e.preventDefault = () => {};
+    }
+  }, true);
 
   init();
 })();
