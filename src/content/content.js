@@ -172,6 +172,7 @@
 
   // ========== ストレージ保存ラッパー ==========
   async function saveMemosLocal(data) {
+    if (!chrome.runtime?.id) return; // コンテキスト無効時はスキップ
     isSaving = true;
     await saveMemos(data);
     // onChanged は非同期で発火するため、次のイベントループで解除
@@ -1097,6 +1098,7 @@
 
     // 他タブで保存が発生した際にメモ一覧・編集画面をリアルタイム更新
     chrome.storage.onChanged.addListener((changes, area) => {
+      if (!chrome.runtime?.id) return; // コンテキスト無効時はスキップ
       if (area !== 'local' || !changes.chromememo_memos) return;
       if (isSaving) return; // 自タブの保存による発火はスキップ
       memos = changes.chromememo_memos.newValue || [];

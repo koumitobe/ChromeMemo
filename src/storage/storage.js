@@ -6,24 +6,41 @@
 const MEMOS_KEY = 'chromememo_memos';
 const SIDEBAR_KEY = 'chromememo_sidebar_open';
 
+/** 拡張機能コンテキストが有効かチェックする */
+function isContextValid() {
+  return !!chrome.runtime?.id;
+}
+
 /** メモ一覧を取得する */
 async function getMemos() {
-  const result = await chrome.storage.local.get(MEMOS_KEY);
-  return result[MEMOS_KEY] || [];
+  if (!isContextValid()) return [];
+  try {
+    const result = await chrome.storage.local.get(MEMOS_KEY);
+    return result[MEMOS_KEY] || [];
+  } catch { return []; }
 }
 
 /** メモ一覧を保存する */
 async function saveMemos(memos) {
-  await chrome.storage.local.set({ [MEMOS_KEY]: memos });
+  if (!isContextValid()) return;
+  try {
+    await chrome.storage.local.set({ [MEMOS_KEY]: memos });
+  } catch { /* コンテキスト無効時は無視 */ }
 }
 
 /** サイドバーの開閉状態を取得する */
 async function getSidebarOpen() {
-  const result = await chrome.storage.local.get(SIDEBAR_KEY);
-  return result[SIDEBAR_KEY] || false;
+  if (!isContextValid()) return false;
+  try {
+    const result = await chrome.storage.local.get(SIDEBAR_KEY);
+    return result[SIDEBAR_KEY] || false;
+  } catch { return false; }
 }
 
 /** サイドバーの開閉状態を保存する */
 async function saveSidebarOpen(isOpen) {
-  await chrome.storage.local.set({ [SIDEBAR_KEY]: isOpen });
+  if (!isContextValid()) return;
+  try {
+    await chrome.storage.local.set({ [SIDEBAR_KEY]: isOpen });
+  } catch { /* コンテキスト無効時は無視 */ }
 }
