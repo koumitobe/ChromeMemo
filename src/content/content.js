@@ -1139,6 +1139,33 @@
   // コンテンツスクリプト読み込み時点で登録することで、
   // SPAが動的に追加するキャプチャハンドラより先に実行される
 
+  /**
+   * クリック横取り対策
+   * ページのオーバーレイがChromeMemoのテキストエリア領域のクリックを吸収している場合、
+   * イベントの伝播を止めてテキストエリアに強制フォーカスする。
+   * pointerdown / mousedown / click の3種類で確実にブロックする。
+   */
+  function interceptClickOnTextarea(e) {
+    try {
+      if (!shadow || !currentId) return;
+      const ta = shadow.getElementById('memo-body-input');
+      if (!ta) return;
+      const rect = ta.getBoundingClientRect();
+      // テキストエリアが非表示・折りたたまれている場合はスキップ
+      if (rect.width === 0 || rect.height === 0) return;
+      const inBounds = e.clientX >= rect.left && e.clientX <= rect.right &&
+                       e.clientY >= rect.top  && e.clientY <= rect.bottom;
+      if (!inBounds) return;
+      // 正常にChromeMemoのshadow DOM経由でイベントが来ている場合は何もしない
+      if (e.composedPath().includes(shadow.host)) return;
+      // ページの要素がクリックを横取りしているため、伝播を止めて強制フォーカス
+      e.stopPropagation();
+      if (e.type !== 'click') ta.focus(); // focusはpointerdown/mousedownで1回だけ
+    } catch (err) { cmLog(`${e.type} interception`, err); }
+  }
+  ['pointerdown', 'mousedown', 'click'].forEach(t =>
+    window.addEventListener(t, interceptClickOnTextarea, true));
+
   // マウスダウン: SPAのpreventDefaultによるフォーカス阻害をブロック
   window.addEventListener('mousedown', e => {
     try {
