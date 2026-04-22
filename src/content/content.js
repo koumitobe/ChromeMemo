@@ -21,6 +21,8 @@
   let shadow, isDark = false, customTemplates = [], editingTemplateId = null;
   let autoSaveTimer = null;
   let undoStack = [], redoStack = [];
+  let isSaving = false; // 自タブ保存中フラグ（他タブからの onChanged と区別する）
+  let isDirty = false;  // 編集中フラグ（未保存の変更があるか）
 
   // ========== Shadow DOM セットアップ ==========
   function buildHost() {
@@ -130,6 +132,8 @@
     if (!memo) return;
 
     isPreview = false;
+    isDirty = false;
+    $('sync-banner').classList.add('hidden');
     $('memo-title-input').value = memo.title;
     $('memo-body-input').value = memo.body;
     undoStack = [{ v: memo.body, s: 0, e: 0 }]; redoStack = [];
@@ -166,6 +170,14 @@
     inp.addEventListener('blur', () => { if (inp.value.trim()) addTag(inp.value); });
   }
 
+  // ========== ストレージ保存ラッパー ==========
+  async function saveMemosLocal(data) {
+    isSaving = true;
+    await saveMemos(data);
+    // onChanged は非同期で発火するため、次のイベントループで解除
+    setTimeout(() => { isSaving = false; }, 0);
+  }
+
   // ========== メモ操作 ==========
   async function createMemo() {
     const memo = {
@@ -173,7 +185,7 @@
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     };
     memos.unshift(memo);
-    await saveMemos(memos);
+    await saveMemosLocal(memos);
     openDetail(memo.id);
   }
 
@@ -183,7 +195,9 @@
     memo.title = $('memo-title-input').value;
     memo.body = $('memo-body-input').value;
     memo.updatedAt = new Date().toISOString();
-    await saveMemos(memos);
+    await saveMemosLocal(memos);
+    isDirty = false;
+    $('sync-banner').classList.add('hidden');
     $('memo-meta-info').textContent = `作成: ${formatDate(memo.createdAt)}　更新: ${formatDate(memo.updatedAt)}`;
     $('last-saved-time').textContent = `保存 ${formatTime(memo.updatedAt)}`;
     renderList();
@@ -192,7 +206,7 @@
   async function deleteMemo() {
     if (!confirm('このメモを削除しますか？')) return;
     memos = memos.filter(m => m.id !== currentId);
-    await saveMemos(memos);
+    await saveMemosLocal(memos);
     currentId = null;
     showDetail(false);
     renderList();
@@ -203,7 +217,7 @@
     if (!confirm(`「${title}」を削除しますか？`)) return;
     memos = memos.filter(m => m.id !== id);
     if (currentId === id) currentId = null;
-    await saveMemos(memos);
+    await saveMemosLocal(memos);
     renderList();
   }
 
@@ -211,7 +225,7 @@
     const memo = memos.find(m => m.id === id);
     if (!memo) return;
     memo.pinned = !memo.pinned;
-    await saveMemos(memos);
+    await saveMemosLocal(memos);
     renderList();
   }
 
@@ -460,7 +474,7 @@
           } else skipped++;
         } else { memos.push(m); merged++; }
       }
-      await saveMemos(memos);
+      await saveMemosLocal(memos);
       renderList();
       alert(`インポート完了: ${merged}件追加・更新、${skipped}件スキップ`);
     } catch (e) { alert(`インポートに失敗しました: ${e.message}`); }
@@ -498,7 +512,22 @@
     });
     $('save-btn').addEventListener('click', saveMemo);
     $('delete-btn').addEventListener('click', deleteMemo);
-    $('memo-title-input').addEventListener('input', scheduleAutoSave);
+    $('sync-apply-btn').addEventListener('click', () => {
+      const updated = memos.find(m => m.id === currentId);
+      if (!updated) return;
+      isDirty = false;
+      $('sync-banner').classList.add('hidden');
+      $('memo-title-input').value = updated.title;
+      $('memo-body-input').value = updated.body;
+      undoStack = [{ v: updated.body, s: 0, e: 0 }]; redoStack = [];
+      $('memo-meta-info').textContent = `作成: ${formatDate(updated.createdAt)}　更新: ${formatDate(updated.updatedAt)}`;
+      $('last-saved-time').textContent = `保存 ${formatTime(updated.updatedAt)}`;
+      renderTagEditor(updated.tags);
+    });
+    $('sync-dismiss-btn').addEventListener('click', () => {
+      $('sync-banner').classList.add('hidden');
+    });
+    $('memo-title-input').addEventListener('input', () => { isDirty = true; scheduleAutoSave(); });
     // IME変換中はスタックに積まない（変換確定後のみ記録）
     let isComposing = false;
     $('memo-body-input').addEventListener('compositionstart', () => { isComposing = true; });
@@ -508,6 +537,7 @@
       undoStack.push({ v: ta.value, s: ta.selectionStart, e: ta.selectionEnd });
       if (undoStack.length > 200) undoStack.shift();
       redoStack = [];
+      isDirty = true;
       scheduleAutoSave();
     });
     $('memo-body-input').addEventListener('input', () => {
@@ -516,6 +546,7 @@
       undoStack.push({ v: ta.value, s: ta.selectionStart, e: ta.selectionEnd });
       if (undoStack.length > 200) undoStack.shift();
       redoStack = [];
+      isDirty = true;
       scheduleAutoSave();
     });
     // Cmd+Z / Cmd+Shift+Z をカスタムスタックで処理（SPAのkeydownより先にキャプチャ）
@@ -637,6 +668,11 @@
       </div>
 
       <div id="detail">
+        <div id="sync-banner" class="sync-banner hidden">
+          他のタブで更新されました
+          <button id="sync-apply-btn">反映する</button>
+          <button id="sync-dismiss-btn">×</button>
+        </div>
         <div id="detail-header">
           <button id="back-btn" title="戻る">‹</button>
           <input id="memo-title-input" type="text" placeholder="タイトルを入力...">
@@ -893,6 +929,18 @@
     .pin-btn.pinned { opacity: 1; }
     .empty-state { text-align: center; color: var(--text2); padding: 40px 16px; font-size: 13px; }
 
+    /* 同期バナー */
+    .sync-banner {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 12px; font-size: 12px;
+      background: #fff8e1; color: #7a5c00;
+      border-bottom: 1px solid #ffe082; flex-shrink: 0;
+    }
+    .sync-banner.hidden { display: none; }
+    .sync-banner button { font-size: 11px; padding: 2px 8px; cursor: pointer; border-radius: 4px; border: 1px solid #ffe082; background: #fff; }
+    #sync-apply-btn { margin-left: auto; color: #7a5c00; }
+    #sync-dismiss-btn { color: #999; }
+
     /* 詳細ビュー */
     #detail { display: none; flex-direction: column; flex: 1; overflow: hidden; }
     #detail.visible { display: flex; }
@@ -1032,7 +1080,7 @@
       updatedAt: new Date().toISOString(),
     };
     memos.push(memo);
-    await saveMemos(memos);
+    await saveMemosLocal(memos);
   }
 
   // ========== 初期化 ==========
@@ -1046,6 +1094,39 @@
     isOpen = await getSidebarOpen();
     if (isOpen) { $('sidebar').classList.add('open'); renderList(); }
     setupEvents();
+
+    // 他タブで保存が発生した際にメモ一覧・編集画面をリアルタイム更新
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'local' || !changes.chromememo_memos) return;
+      if (isSaving) return; // 自タブの保存による発火はスキップ
+      memos = changes.chromememo_memos.newValue || [];
+      if (!isOpen) return;
+
+      // 編集画面が開いている場合は同期処理
+      if (currentId) {
+        const updated = memos.find(m => m.id === currentId);
+        if (updated) {
+          if (!isDirty) {
+            // 未編集ならそのまま反映
+            $('memo-title-input').value = updated.title;
+            $('memo-body-input').value = updated.body;
+            undoStack = [{ v: updated.body, s: 0, e: 0 }]; redoStack = [];
+            $('memo-meta-info').textContent = `作成: ${formatDate(updated.createdAt)}　更新: ${formatDate(updated.updatedAt)}`;
+            $('last-saved-time').textContent = `保存 ${formatTime(updated.updatedAt)}`;
+            renderTagEditor(updated.tags);
+          } else {
+            // 編集中はバナーで通知し、ユーザーの判断に委ねる
+            $('sync-banner').classList.remove('hidden');
+          }
+        } else {
+          // 他タブで削除された場合は一覧に戻る
+          currentId = null; isDirty = false;
+          $('sync-banner').classList.add('hidden');
+          showDetail(false);
+        }
+      }
+      renderList();
+    });
   }
 
   chrome.runtime.onMessage.addListener(({ type }) => {
