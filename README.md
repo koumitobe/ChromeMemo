@@ -1,90 +1,80 @@
-# 仕様駆動開発テンプレート
+# ChromeMemo
 
-ClaudeCodeによる仕様駆動開発のスターターテンプレートです。
-
----
-
-## クイックスタート
-
-```bash
-# このテンプレートをコピーして新プロジェクトを開始
-cp -r spec-driven-template/ my-new-project/
-cd my-new-project/
-
-# CLAUDE.mdのプロジェクト情報を更新
-# .env.exampleを.envにコピーして設定
-cp .env.example .env
-```
+Chrome拡張機能として動作する、サイドバー型のメモアプリです。ブラウザを使いながらページを離れることなくメモを記録・管理できます。
 
 ---
 
-## 開発フロー
+## 主な機能
 
-```
-1. 要件定義（specs/requirements/）
-   └─ PRD-XXX_feature-name.md を作成
+- **サイドバー表示** — ショートカットキー（`Cmd+M` / `Alt+M`）またはツールバーアイコンで開閉
+- **メモの作成・編集・削除** — タイトル・本文・タグを管理
+- **タグ機能** — タグによるフィルタリング
+- **ピン留め** — 重要なメモを一覧の上部に固定
+- **Markdownプレビュー** — 本文をMarkdown記法で記述してプレビュー表示
+- **キーワード検索** — タイトル・本文・タグをリアルタイム検索
+- **URL挿入** — 現在閲覧中のページのURLをワンクリックで挿入
+- **テンプレート** — 定型文を登録してカーソル位置に挿入
+- **ダークモード** — ライト/ダーク切替対応
+- **エクスポート / インポート** — JSONファイルでのバックアップ・移行
+- **Undo / Redo** — `Cmd+Z` / `Cmd+Shift+Z` によるテキスト編集の取り消し・やり直し
 
-2. 設計（specs/design/ + specs/api/）
-   ├─ DS-XXX_feature-name.md を作成
-   └─ API-XXX_resource-name.md を作成
+---
 
-3. タスク分割（tasks/）
-   └─ /task-create コマンドでタスクファイル作成
+## インストール
 
-4. 実装（src/）
-   └─ 仕様に従って実装
+Chrome Web Storeは使用せず、ローカルファイルから読み込みます。
 
-5. テスト（tests/）
-   └─ 受け入れ条件に対応するテストを作成
+1. このリポジトリをクローンまたはZIPダウンロードして解凍
+2. Chromeで `chrome://extensions` を開く
+3. 右上の「**デベロッパーモード**」をオンにする
+4. 「**パッケージ化されていない拡張機能を読み込む**」をクリック
+5. リポジトリ内の `src/` フォルダを選択
 
-6. 整合性チェック
-   └─ /spec-check で仕様と実装のズレを確認
-```
+詳細は [docs/manual/install.md](docs/manual/install.md) を参照してください。
+
+---
+
+## 使い方
+
+| 操作 | 方法 |
+|------|------|
+| サイドバーを開く/閉じる | `Cmd+M`（Mac） / `Alt+M`（Windows） |
+| 新規メモ | サイドバー内「＋ 新規メモ」ボタン |
+| メモを保存 | 「保存」ボタン（自動保存あり） |
+| Undo / Redo | `Cmd+Z` / `Cmd+Shift+Z` |
+
+詳細は [docs/manual/usage.md](docs/manual/usage.md) を参照してください。
 
 ---
 
 ## ディレクトリ構成
 
-| パス | 役割 |
-|------|------|
-| `CLAUDE.md` | AIへの行動指針・プロジェクトルール |
-| `.claude/commands/` | カスタムスラッシュコマンド定義 |
-| `.claude/skills/` | 再利用可能なAIスキル定義 |
-| `.claude/settings.json` | ClaudeCodeの権限設定 |
-| `specs/requirements/` | 要件定義書（PRD） |
-| `specs/design/` | 設計仕様書 |
-| `specs/api/` | API仕様書 |
-| `specs/changelog/` | 仕様変更履歴 |
-| `docs/adr/` | アーキテクチャ決定記録 |
-| `docs/architecture.md` | システム構成図 |
-| `tasks/` | タスク・進捗管理 |
-| `.env.example` | 環境変数テンプレート |
+```
+ChromeMemo/
+├── src/
+│   ├── manifest.json          # 拡張機能の設定ファイル
+│   ├── background/
+│   │   └── service-worker.js  # バックグラウンド処理
+│   ├── content/
+│   │   └── content.js         # サイドバーUI・メモ管理のメイン実装
+│   ├── markdown/
+│   │   └── markdown.js        # Markdownパーサー
+│   ├── storage/
+│   │   └── storage.js         # chrome.storage.local ラッパー
+│   └── icons/
+├── docs/
+│   └── manual/
+│       ├── install.md         # インストール手順
+│       └── usage.md           # 操作マニュアル
+└── specs/
+    ├── requirements/          # 要件定義書
+    └── design/                # 設計仕様書
+```
 
 ---
 
-## カスタムコマンド
+## データについて
 
-| コマンド | 説明 |
-|---------|------|
-| `/spec-check` | 実装と仕様の整合性チェック |
-| `/task-create` | タスクファイルの新規作成 |
-| `/adr-new` | ADRの新規作成 |
-
----
-
-## 番号体系
-
-### PRD（要件定義書）
-`PRD-001_feature-name.md` — 連番
-
-### DS（設計書）
-`DS-001_feature-name.md` — PRDと対応した番号
-
-### API仕様
-`API-001_resource-name.md` — 連番
-
-### ADR
-- ADR-001〜099: インフラ・基盤
-- ADR-100〜199: アーキテクチャ
-- ADR-200〜299: 技術選定
-- ADR-300〜399: プロセス
+- メモは `chrome.storage.local` に保存されます
+- Chromeの「閲覧データを消去」を実行するとメモも削除されます（事前にエクスポート推奨）
+- 別PCへの移行はエクスポート → インポートで行えます
